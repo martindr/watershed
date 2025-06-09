@@ -6,3 +6,4 @@ numpy
 plotly
 pyshp
 pyproj
+shapely
