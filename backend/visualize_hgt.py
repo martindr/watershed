@@ -118,7 +118,13 @@ def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATI
 
     fig = go.Figure()
     for level in exag_levels:
-        fig.add_surface(z=elevation * level, x=lon, y=lat, visible=False)
+        fig.add_surface(
+            z=elevation * level,
+            x=lon,
+            y=lat,
+            visible=False,
+            colorscale="Earth",
+        )
 
     start_index = exag_levels.index(exaggeration)
     fig.data[start_index].visible = True
