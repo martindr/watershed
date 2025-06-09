@@ -1,4 +1,5 @@
 import os
+import gzip
 import numpy as np
 import plotly.graph_objects as go
 
@@ -6,11 +7,15 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 
 def read_hgt(file_path):
-    """Read an .hgt file into a 2D numpy array."""
-    with open(file_path, 'rb') as f:
-        data = np.fromfile(f, '>i2')
+    """Read an .hgt or .hgt.gz file into a 2D numpy array."""
+    open_func = gzip.open if file_path.lower().endswith('.gz') else open
+    with open_func(file_path, 'rb') as f:
+        raw = f.read()
+    data = np.frombuffer(raw, '>i2')
     size = int(np.sqrt(data.size))
-    return data.reshape((size, size))
+    elev = data.reshape((size, size)).astype(float)
+    elev[elev == -32768] = np.nan
+    return elev
 
 
 def lat_lon_from_filename(filename):
@@ -26,10 +31,11 @@ def lat_lon_from_filename(filename):
 def load_tiles():
     tiles = []
     for fname in os.listdir(DATA_DIR):
-        if fname.lower().endswith('.hgt'):
+        if fname.lower().endswith(('.hgt', '.hgt.gz')):
             path = os.path.join(DATA_DIR, fname)
             elev = read_hgt(path)
-            lat, lon = lat_lon_from_filename(fname)
+            base = fname[:-3] if fname.lower().endswith('.gz') else fname
+            lat, lon = lat_lon_from_filename(base)
             tiles.append((lat, lon, elev))
     return tiles
 
@@ -41,13 +47,13 @@ def merge_tiles(tiles):
     lats = sorted(set(lat for lat, _, _ in tiles))
     lons = sorted(set(lon for _, lon, _ in tiles))
     tile_size = tiles[0][2].shape[0]
-    grid = np.zeros((len(lats) * tile_size, len(lons) * tile_size), dtype=np.int16)
+    grid = np.full((len(lats) * tile_size, len(lons) * tile_size), np.nan, dtype=float)
     for lat, lon, data in tiles:
         i = lats.index(lat)
         j = lons.index(lon)
         row = (len(lats) - 1 - i) * tile_size
         col = j * tile_size
-        grid[row:row + tile_size, col:col + tile_size] = data
+        grid[row:row + tile_size, col:col + tile_size] = data.astype(float)
     lat0 = lats[0]
     lon0 = lons[0]
     lat_coords = np.linspace(lat0, lat0 + len(lats), grid.shape[0])
