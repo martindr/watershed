@@ -4,8 +4,11 @@ import logging
 import argparse
 import numpy as np
 import plotly.graph_objects as go
+import shapefile
+from pyproj import Transformer
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+RIVERS_SHP = os.path.join(DATA_DIR, 'HVC_NamedStreams', 'HVC_NamedStreams.shp')
 
 # Default vertical exaggeration applied to the elevation data when plotting.
 # Values < 1.0 will make the landscape appear flatter.
@@ -151,12 +154,36 @@ def cut_north_of_line(lat, lon, elevation, pt1, pt2):
     return elevation
 
 
+def load_rivers(lat_grid, lon_grid, elev_grid, shp_path=RIVERS_SHP):
+    """Load river polylines and sample elevation along them."""
+    if not os.path.exists(shp_path):
+        logger.warning("River shapefile not found: %s", shp_path)
+        return []
+
+    logger.info("Loading rivers from %s", shp_path)
+    sf = shapefile.Reader(shp_path)
+    transformer = Transformer.from_crs("epsg:26910", "epsg:4326", always_xy=True)
+    rivers = []
+    for shp in sf.shapes():
+        coords = [transformer.transform(x, y) for x, y in shp.points]
+        lons, lats = zip(*coords)
+        zs = []
+        for lat_pt, lon_pt in zip(lats, lons):
+            i = int(np.abs(lat_grid - lat_pt).argmin())
+            j = int(np.abs(lon_grid - lon_pt).argmin())
+            zs.append(elev_grid[i, j])
+        rivers.append((np.array(lats), np.array(lons), np.array(zs)))
+    logger.info("Loaded %d river polylines", len(rivers))
+    return rivers
+
+
 def plot_elevation(
     lat,
     lon,
     elevation,
     exaggeration: float = DEFAULT_EXAGGERATION,
     callouts=None,
+    rivers=None,
 ):
     """Plot the elevation grid as a 3D surface with optional callout points."""
     logger.info("Generating elevation plot")
@@ -196,11 +223,40 @@ def plot_elevation(
                 )
             )
 
+    rivers = rivers or []
+    n_rivers = len(rivers)
+    if n_rivers:
+        logger.info("Adding %d river trace(s)", n_rivers)
+    for level_idx, level in enumerate(exag_levels):
+        xs, ys, zs = [], [], []
+        for r_lat, r_lon, r_z in rivers:
+            xs.extend(r_lon)
+            xs.append(None)
+            ys.extend(r_lat)
+            ys.append(None)
+            zs.extend(r_z * level)
+            zs.append(None)
+        if xs:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=xs,
+                    y=ys,
+                    z=zs,
+                    mode="lines",
+                    line=dict(color="blue", width=2),
+                    name="Rivers",
+                    visible=False,
+                )
+            )
+
     start_index = exag_levels.index(exaggeration)
     total_levels = len(exag_levels)
     fig.data[start_index].visible = True
     for idx in range(n_points):
         fig.data[total_levels + start_index * n_points + idx].visible = True
+    if n_rivers:
+        rivers_offset = total_levels + total_levels * n_points
+        fig.data[rivers_offset + start_index].visible = True
 
     steps = []
     for i, level in enumerate(exag_levels):
@@ -210,8 +266,38 @@ def plot_elevation(
         for j in range(total_levels):
             for _ in range(n_points):
                 visible.append(j == i)
+        for j in range(total_levels):
+            if n_rivers:
+                visible.append(j == i)
         step = dict(method="update", args=[{"visible": visible}], label=str(level))
         steps.append(step)
+
+    updatemenus = []
+    if n_rivers:
+        rivers_indices = list(range(rivers_offset, rivers_offset + total_levels))
+        updatemenus.append(
+            dict(
+                type="buttons",
+                direction="left",
+                buttons=[
+                    dict(
+                        label="Show Rivers",
+                        method="restyle",
+                        args=["visible", True, rivers_indices],
+                    ),
+                    dict(
+                        label="Hide Rivers",
+                        method="restyle",
+                        args=["visible", False, rivers_indices],
+                    ),
+                ],
+                pad={"t": 10},
+                showactive=False,
+                x=0.05,
+                y=1.15,
+                xanchor="left",
+            )
+        )
 
     fig.update_layout(
         title="Terrain Elevation",
@@ -227,6 +313,7 @@ def plot_elevation(
             pad={"t": 50},
             steps=steps,
         )],
+        updatemenus=updatemenus,
     )
 
     # fig.show()    
@@ -267,6 +354,8 @@ if __name__ == '__main__':
         (50.426341, -120.947810),  # Witches Brook
     )
 
+    rivers = load_rivers(lat, lon, elev)
+
     elev_downsampled = elev[::5, ::5]
     callouts = [
         ("Pukaist Creek", 50.592647, -121.324994),
@@ -278,6 +367,7 @@ if __name__ == '__main__':
         elev_downsampled,
         exaggeration=args.exaggeration,
         callouts=callouts,
+        rivers=rivers,
     )
 
     logger.info("Visualization complete")

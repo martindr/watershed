@@ -4,3 +4,5 @@ uvicorn[standard]
 
 numpy
 plotly
+pyshp
+pyproj
