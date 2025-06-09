@@ -229,10 +229,10 @@ def plot_elevation(
         )],
     )
 
-    fig.show()    
-    # output_html = os.path.join(os.path.dirname(__file__), "elevation_plot.html")
-    # fig.write_html(output_html, auto_open=True)
-    # logger.info(f"Saved plot to {output_html}")
+    # fig.show()    
+    output_html = os.path.join(os.path.dirname(__file__), "elevation_plot.html")
+    fig.write_html(output_html, auto_open=True)
+    logger.info(f"Saved plot to {output_html}")
 
 
 if __name__ == '__main__':

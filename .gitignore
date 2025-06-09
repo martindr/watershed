@@ -10,7 +10,8 @@ frontend/node_modules/
 npm-debug.log*
 
 # Large GIS files
-data/
+*.hgt
+*.hgt.gz
 
 # Generated HTML file
 *.html
