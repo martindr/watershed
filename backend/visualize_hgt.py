@@ -108,6 +108,49 @@ def crop_extent(lat, lon, elevation, lat_min, lat_max, lon_min, lon_max):
     return cropped_lat, cropped_lon, cropped_elev
 
 
+def cut_north_of_line(lat, lon, elevation, pt1, pt2):
+    """Remove all elevation data north of the line defined by pt1 and pt2.
+
+    Parameters
+    ----------
+    lat : np.ndarray
+        1D array of latitude coordinates.
+    lon : np.ndarray
+        1D array of longitude coordinates.
+    elevation : np.ndarray
+        2D elevation grid with shape ``(lat.size, lon.size)``.
+    pt1 : tuple[float, float]
+        ``(lat, lon)`` of the first point on the line.
+    pt2 : tuple[float, float]
+        ``(lat, lon)`` of the second point on the line.
+
+    Returns
+    -------
+    np.ndarray
+        The modified elevation array with values north of the line set to NaN.
+    """
+
+    lat1, lon1 = pt1
+    lat2, lon2 = pt2
+    slope = (lat2 - lat1) / (lon2 - lon1)
+    intercept = lat1 - slope * lon1
+
+    logger.info(
+        "Cutting terrain north of line between (%.6f, %.6f) and (%.6f, %.6f)",
+        lat1,
+        lon1,
+        lat2,
+        lon2,
+    )
+
+    for j, lon_val in enumerate(lon):
+        cut_lat = slope * lon_val + intercept
+        mask = lat > cut_lat
+        elevation[mask, j] = np.nan
+
+    return elevation
+
+
 def plot_elevation(
     lat,
     lon,
@@ -213,6 +256,15 @@ if __name__ == '__main__':
         LATITUDE_MAX,
         LONGITUDE_MIN,
         LONGITUDE_MAX,
+    )
+
+    # Remove terrain north of the line connecting Pukaist Creek and Witches Brook
+    elev = cut_north_of_line(
+        lat,
+        lon,
+        elev,
+        (50.592647, -121.324994),  # Pukaist Creek
+        (50.426341, -120.947810),  # Witches Brook
     )
 
     elev_downsampled = elev[::5, ::5]
