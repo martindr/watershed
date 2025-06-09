@@ -6,6 +6,10 @@ import plotly.graph_objects as go
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
+# Area of interest bounding box
+LONGITUDE_MIN, LONGITUDE_MAX = -121.363525, -120.7
+LATITUDE_MIN, LATITUDE_MAX = 50.2, 50.7
+
 # Configure basic logging so we can trace the data loaded and processed
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
@@ -81,6 +85,24 @@ def merge_tiles(tiles):
     return lat_coords, lon_coords, grid
 
 
+def crop_extent(lat, lon, elevation, lat_min, lat_max, lon_min, lon_max):
+    """Crop the elevation grid to the specified latitude and longitude bounds."""
+    lat_mask = (lat >= lat_min) & (lat <= lat_max)
+    lon_mask = (lon >= lon_min) & (lon <= lon_max)
+    cropped_elev = elevation[np.ix_(lat_mask, lon_mask)]
+    cropped_lat = lat[lat_mask]
+    cropped_lon = lon[lon_mask]
+    logger.info(
+        "Cropped grid to lat %.3f-%.3f, lon %.3f-%.3f -> shape %s",
+        lat_min,
+        lat_max,
+        lon_min,
+        lon_max,
+        cropped_elev.shape,
+    )
+    return cropped_lat, cropped_lon, cropped_elev
+
+
 def plot_elevation(lat, lon, elevation):
     logger.info("Generating elevation plot")
     fig = go.Figure(data=[go.Surface(z=elevation, x=lon, y=lat)])
@@ -101,5 +123,14 @@ if __name__ == '__main__':
     logger.info("Starting elevation visualization workflow")
     tiles = load_tiles()
     lat, lon, elev = merge_tiles(tiles)
+    lat, lon, elev = crop_extent(
+        lat,
+        lon,
+        elev,
+        LATITUDE_MIN,
+        LATITUDE_MAX,
+        LONGITUDE_MIN,
+        LONGITUDE_MAX,
+    )
     plot_elevation(lat, lon, elev)
     logger.info("Visualization complete")
