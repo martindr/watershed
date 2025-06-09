@@ -182,5 +182,8 @@ if __name__ == '__main__':
         LONGITUDE_MIN,
         LONGITUDE_MAX,
     )
-    plot_elevation(lat, lon, elev, exaggeration=args.exaggeration)
+
+    elev_downsampled = elev[::5, ::5]
+    plot_elevation(lat[::5], lon[::5], elev_downsampled, exaggeration=args.exaggeration)
+
     logger.info("Visualization complete")
