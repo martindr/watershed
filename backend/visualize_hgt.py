@@ -157,8 +157,27 @@ def plot_elevation(
     elevation,
     exaggeration: float = DEFAULT_EXAGGERATION,
     callouts=None,
+    cut_line=None,
+    hatch_spacing: float = 0.01,
 ):
-    """Plot the elevation grid as a 3D surface with optional callout points."""
+    """Plot the elevation grid as a 3D surface with optional callouts and
+    an optional cross-hatch pattern along a cut line.
+
+    Parameters
+    ----------
+    lat, lon : np.ndarray
+        Coordinate vectors for the elevation grid.
+    elevation : np.ndarray
+        2D elevation values.
+    exaggeration : float, optional
+        Initial vertical exaggeration factor.
+    callouts : list[tuple[str, float, float]], optional
+        Markers to display at given ``(lat, lon)`` positions.
+    cut_line : tuple[tuple[float, float], tuple[float, float]], optional
+        Start and end ``(lat, lon)`` defining the cut line.
+    hatch_spacing : float, optional
+        Spacing between hatch lines when ``cut_line`` is provided.
+    """
     logger.info("Generating elevation plot")
 
     exag_levels = [0.00001, 0.00002, 0.00003, 0.00004, 0.00005, 0.00006, 0.00007, 0.00008, 0.00009, 0.0001]
@@ -196,11 +215,58 @@ def plot_elevation(
                 )
             )
 
+    hatch_traces_per_level = 0
+    if cut_line is not None:
+        logger.info("Adding cross-hatch pattern with spacing %.3f", hatch_spacing)
+        pt1, pt2 = cut_line
+        slope = (pt2[0] - pt1[0]) / (pt2[1] - pt1[1])
+        intercept = pt1[0] - slope * pt1[1]
+        lon_min = min(pt1[1], pt2[1])
+        lon_max = max(pt1[1], pt2[1])
+        hatch_lons = np.arange(lon_min, lon_max, hatch_spacing)
+        hatch_traces_per_level = len(hatch_lons) * 2
+        for level_idx, level in enumerate(exag_levels):
+            for lon_val in hatch_lons:
+                lat_val = slope * lon_val + intercept
+                i = int(np.abs(lat - lat_val).argmin())
+                j = int(np.abs(lon - lon_val).argmin())
+                z_top = elevation[i, j] * level
+                if np.isnan(z_top):
+                    continue
+                lon_off = hatch_spacing / 2
+                lat_off = slope * lon_off
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[lon_val, lon_val + lon_off],
+                        y=[lat_val, lat_val + lat_off],
+                        z=[z_top, 0],
+                        mode="lines",
+                        line=dict(color="black", width=1),
+                        visible=False,
+                        showlegend=False,
+                    )
+                )
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[lon_val, lon_val - lon_off],
+                        y=[lat_val, lat_val - lat_off],
+                        z=[z_top, 0],
+                        mode="lines",
+                        line=dict(color="black", width=1),
+                        visible=False,
+                        showlegend=False,
+                    )
+                )
+
     start_index = exag_levels.index(exaggeration)
     total_levels = len(exag_levels)
     fig.data[start_index].visible = True
     for idx in range(n_points):
         fig.data[total_levels + start_index * n_points + idx].visible = True
+    if cut_line is not None:
+        offset = total_levels + total_levels * n_points
+        for idx in range(hatch_traces_per_level):
+            fig.data[offset + start_index * hatch_traces_per_level + idx].visible = True
 
     steps = []
     for i, level in enumerate(exag_levels):
@@ -210,6 +276,10 @@ def plot_elevation(
         for j in range(total_levels):
             for _ in range(n_points):
                 visible.append(j == i)
+        if cut_line is not None:
+            for j in range(total_levels):
+                for _ in range(hatch_traces_per_level):
+                    visible.append(j == i)
         step = dict(method="update", args=[{"visible": visible}], label=str(level))
         steps.append(step)
 
@@ -278,6 +348,8 @@ if __name__ == '__main__':
         elev_downsampled,
         exaggeration=args.exaggeration,
         callouts=callouts,
+        cut_line=((50.592647, -121.324994), (50.426341, -120.947810)),
+        hatch_spacing=0.005,
     )
 
     logger.info("Visualization complete")
