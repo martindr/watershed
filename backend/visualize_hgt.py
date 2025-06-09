@@ -108,8 +108,14 @@ def crop_extent(lat, lon, elevation, lat_min, lat_max, lon_min, lon_max):
     return cropped_lat, cropped_lon, cropped_elev
 
 
-def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATION):
-    """Plot the elevation grid as a 3D surface."""
+def plot_elevation(
+    lat,
+    lon,
+    elevation,
+    exaggeration: float = DEFAULT_EXAGGERATION,
+    callouts=None,
+):
+    """Plot the elevation grid as a 3D surface with optional callout points."""
     logger.info("Generating elevation plot")
 
     exag_levels = [0.00001, 0.00002, 0.00003, 0.00004, 0.00005, 0.00006, 0.00007, 0.00008, 0.00009, 0.0001]
@@ -126,16 +132,42 @@ def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATI
             colorscale="Earth",
         )
 
+    callouts = callouts or []
+    n_points = len(callouts)
+    if n_points:
+        logger.info("Adding %d callout point(s)", n_points)
+    for level_idx, level in enumerate(exag_levels):
+        for name, lat_pt, lon_pt in callouts:
+            i = int(np.abs(lat - lat_pt).argmin())
+            j = int(np.abs(lon - lon_pt).argmin())
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[lon[j]],
+                    y=[lat[i]],
+                    z=[elevation[i, j] * level],
+                    mode="markers+text",
+                    text=[name],
+                    textposition="top center",
+                    marker=dict(size=4, color="red"),
+                    visible=False,
+                )
+            )
+
     start_index = exag_levels.index(exaggeration)
+    total_levels = len(exag_levels)
     fig.data[start_index].visible = True
+    for idx in range(n_points):
+        fig.data[total_levels + start_index * n_points + idx].visible = True
 
     steps = []
     for i, level in enumerate(exag_levels):
-        step = dict(
-            method="update",
-            args=[{"visible": [j == i for j in range(len(exag_levels))]}],
-            label=str(level),
-        )
+        visible = []
+        for j in range(total_levels):
+            visible.append(j == i)
+        for j in range(total_levels):
+            for _ in range(n_points):
+                visible.append(j == i)
+        step = dict(method="update", args=[{"visible": visible}], label=str(level))
         steps.append(step)
 
     fig.update_layout(
@@ -184,6 +216,16 @@ if __name__ == '__main__':
     )
 
     elev_downsampled = elev[::5, ::5]
-    plot_elevation(lat[::5], lon[::5], elev_downsampled, exaggeration=args.exaggeration)
+    callouts = [
+        ("Pukaist Creek", 50.592647, -121.324994),
+        ("Witches Brook", 50.426341, -120.947810),
+    ]
+    plot_elevation(
+        lat[::5],
+        lon[::5],
+        elev_downsampled,
+        exaggeration=args.exaggeration,
+        callouts=callouts,
+    )
 
     logger.info("Visualization complete")
