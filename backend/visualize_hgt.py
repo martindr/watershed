@@ -15,6 +15,9 @@ RIVERS_SHP = os.path.join(DATA_DIR, 'HVC_NamedStreams', 'HVC_NamedStreams.shp')
 # Values < 1.0 will make the landscape appear flatter.
 DEFAULT_EXAGGERATION = 0.00003
 
+# Distance (in meters) to extend callout lines above the terrain
+CALLOUT_LINE_HEIGHT_M = 500
+
 # Area of interest bounding box
 LONGITUDE_MIN, LONGITUDE_MAX = -121.363525, -120.7
 LATITUDE_MIN, LATITUDE_MAX = 50.2, 50.7
@@ -259,15 +262,17 @@ def plot_elevation(
         for name, lat_pt, lon_pt in callouts:
             i = int(np.abs(lat - lat_pt).argmin())
             j = int(np.abs(lon - lon_pt).argmin())
+            base = elevation[i, j] * level
+            top = base + CALLOUT_LINE_HEIGHT_M * level
             fig.add_trace(
                 go.Scatter3d(
-                    x=[lon[j]],
-                    y=[lat[i]],
-                    z=[elevation[i, j] * level],
-                    mode="markers+text",
-                    text=[name],
+                    x=[lon[j], lon[j]],
+                    y=[lat[i], lat[i]],
+                    z=[base, top],
+                    mode="lines+text",
+                    text=["", name],
                     textposition="top center",
-                    marker=dict(size=4, color="red"),
+                    line=dict(color="red", width=2),
                     visible=False,
                 )
             )
@@ -276,15 +281,17 @@ def plot_elevation(
             for name, lat_pt, lon_pt in callouts:
                 i = int(np.abs(lat - lat_pt).argmin())
                 j = int(np.abs(lon - lon_pt).argmin())
+                base = cut_elevation[i, j] * level
+                top = base + CALLOUT_LINE_HEIGHT_M * level
                 fig.add_trace(
                     go.Scatter3d(
-                        x=[lon[j]],
-                        y=[lat[i]],
-                        z=[cut_elevation[i, j] * level],
-                        mode="markers+text",
-                        text=[name],
+                        x=[lon[j], lon[j]],
+                        y=[lat[i], lat[i]],
+                        z=[base, top],
+                        mode="lines+text",
+                        text=["", name],
                         textposition="top center",
-                        marker=dict(size=4, color="red"),
+                        line=dict(color="red", width=2),
                         visible=False,
                     )
                 )
