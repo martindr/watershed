@@ -1,10 +1,15 @@
 import os
 import gzip
 import logging
+import argparse
 import numpy as np
 import plotly.graph_objects as go
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+
+# Default vertical exaggeration applied to the elevation data when plotting.
+# Values < 1.0 will make the landscape appear flatter.
+DEFAULT_EXAGGERATION = 0.02
 
 # Area of interest bounding box
 LONGITUDE_MIN, LONGITUDE_MAX = -121.363525, -120.7
@@ -103,15 +108,18 @@ def crop_extent(lat, lon, elevation, lat_min, lat_max, lon_min, lon_max):
     return cropped_lat, cropped_lon, cropped_elev
 
 
-def plot_elevation(lat, lon, elevation):
+def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATION):
+    """Plot the elevation grid as a 3D surface."""
     logger.info("Generating elevation plot")
-    fig = go.Figure(data=[go.Surface(z=elevation, x=lon, y=lat)])
+    scaled_elev = elevation * exaggeration
+    fig = go.Figure(data=[go.Surface(z=scaled_elev, x=lon, y=lat)])
     fig.update_layout(
         title='Terrain Elevation',
         scene=dict(
             xaxis_title='Longitude',
             yaxis_title='Latitude',
-            zaxis_title='Elevation (m)'
+            zaxis_title='Elevation (m)',
+            aspectmode='data',
         ),
     )
     output_html = os.path.join(os.path.dirname(__file__), 'elevation_plot.html')
@@ -120,6 +128,15 @@ def plot_elevation(lat, lon, elevation):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Visualize elevation tiles')
+    parser.add_argument(
+        '--exaggeration',
+        type=float,
+        default=DEFAULT_EXAGGERATION,
+        help='Vertical exaggeration factor (default: %(default)s)',
+    )
+    args = parser.parse_args()
+
     logger.info("Starting elevation visualization workflow")
     tiles = load_tiles()
     lat, lon, elev = merge_tiles(tiles)
@@ -132,5 +149,5 @@ if __name__ == '__main__':
         LONGITUDE_MIN,
         LONGITUDE_MAX,
     )
-    plot_elevation(lat, lon, elev)
+    plot_elevation(lat, lon, elev, exaggeration=args.exaggeration)
     logger.info("Visualization complete")
