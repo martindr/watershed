@@ -9,7 +9,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 # Default vertical exaggeration applied to the elevation data when plotting.
 # Values < 1.0 will make the landscape appear flatter.
-DEFAULT_EXAGGERATION = 0.02
+DEFAULT_EXAGGERATION = 0.00002
 
 # Area of interest bounding box
 LONGITUDE_MIN, LONGITUDE_MAX = -121.363525, -120.7
@@ -112,7 +112,7 @@ def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATI
     """Plot the elevation grid as a 3D surface."""
     logger.info("Generating elevation plot")
 
-    exag_levels = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
+    exag_levels = [0.00001, 0.00002, 0.00003, 0.00004, 0.00005, 0.00006, 0.00007, 0.00008, 0.00009, 0.0001]
     if exaggeration not in exag_levels:
         exag_levels.insert(0, exaggeration)
 
@@ -148,9 +148,10 @@ def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATI
         )],
     )
 
-    output_html = os.path.join(os.path.dirname(__file__), "elevation_plot.html")
-    fig.write_html(output_html, auto_open=True)
-    logger.info(f"Saved plot to {output_html}")
+    fig.show()    
+    # output_html = os.path.join(os.path.dirname(__file__), "elevation_plot.html")
+    # fig.write_html(output_html, auto_open=True)
+    # logger.info(f"Saved plot to {output_html}")
 
 
 if __name__ == '__main__':
