@@ -423,37 +423,37 @@ def plot_elevation(
             full_indices += list(range(rivers_offset, rivers_offset + total_levels))
     plot_html = fig.to_html(full_html=False, include_plotlyjs="cdn")
 
-    checkbox_html = f"""
-    <div style='padding:10px;'>
-      <label><input type='checkbox' id='cutoutToggle' {'checked' if apply_cutout else ''}> Cutout</label>
-      <label style='margin-left:20px'><input type='checkbox' id='riversToggle' checked> Rivers</label>
-    </div>
-    """
+    # checkbox_html = f"""
+    # <div style='padding:10px;'>
+    #   <label><input type='checkbox' id='cutoutToggle' {'checked' if apply_cutout else ''}> Cutout</label>
+    #   <label style='margin-left:20px'><input type='checkbox' id='riversToggle' checked> Rivers</label>
+    # </div>
+    # """
 
-    script = f"""
-    <script>
-      const plotId = document.getElementsByClassName('plotly-graph-div')[0].id;
-      const cutIndices = {cut_indices};
-      const fullIndices = {full_indices};
-      const riverIndices = {river_indices};
-      document.getElementById('cutoutToggle').addEventListener('change', (e) => {{
-        const on = e.target.checked;
-        Plotly.restyle(plotId, {{visible: on}}, cutIndices);
-        Plotly.restyle(plotId, {{visible: !on}}, fullIndices);
-      }});
-      document.getElementById('riversToggle').addEventListener('change', (e) => {{
-        const show = e.target.checked;
-        Plotly.restyle(plotId, {{visible: show}}, riverIndices);
-      }});
-    </script>
-    """
+    # script = f"""
+    # <script>
+    #   const plotId = document.getElementsByClassName('plotly-graph-div')[0].id;
+    #   const cutIndices = {cut_indices};
+    #   const fullIndices = {full_indices};
+    #   const riverIndices = {river_indices};
+    #   document.getElementById('cutoutToggle').addEventListener('change', (e) => {{
+    #     const on = e.target.checked;
+    #     Plotly.restyle(plotId, {{visible: on}}, cutIndices);
+    #     Plotly.restyle(plotId, {{visible: !on}}, fullIndices);
+    #   }});
+    #   document.getElementById('riversToggle').addEventListener('change', (e) => {{
+    #     const show = e.target.checked;
+    #     Plotly.restyle(plotId, {{visible: show}}, riverIndices);
+    #   }});
+    # </script>
+    # """
 
     output_html = os.path.join(os.path.dirname(__file__), "elevation_plot.html")
     with open(output_html, "w", encoding="utf-8") as f:
         f.write("<html><head><meta charset='utf-8'></head><body>")
-        f.write(checkbox_html)
+        # f.write(checkbox_html)
         f.write(plot_html)
-        f.write(script)
+        # f.write(script)
         f.write("</body></html>")
     logger.info(f"Saved plot to {output_html}")
 
