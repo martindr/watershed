@@ -6,10 +6,11 @@ import numpy as np
 import plotly.graph_objects as go
 import shapefile
 from pyproj import Transformer
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString, Polygon, box
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 RIVERS_SHP = os.path.join(DATA_DIR, 'HVC_NamedStreams', 'HVC_NamedStreams.shp')
+MINE_SHP = os.path.join(DATA_DIR, 'HVC_PermittedMineArea', 'HVC_PermittedMineArea.shp')
 
 # Default vertical exaggeration applied to the elevation data when plotting.
 # Values < 1.0 will make the landscape appear flatter.
@@ -200,6 +201,52 @@ def load_rivers(lat_grid, lon_grid, elev_grid, shp_path=RIVERS_SHP):
     return rivers
 
 
+def load_mine_boundary(lat_grid, lon_grid, elev_grid, shp_path=MINE_SHP):
+    """Load mine boundary polygons as line segments clipped to the area."""
+    if not os.path.exists(shp_path):
+        logger.warning("Mine boundary shapefile not found: %s", shp_path)
+        return []
+
+    logger.info("Loading mine boundary from %s", shp_path)
+    sf = shapefile.Reader(shp_path)
+    transformer = Transformer.from_crs("epsg:26910", "epsg:4326", always_xy=True)
+
+    bbox = box(
+        LONGITUDE_MIN,
+        LATITUDE_MIN,
+        LONGITUDE_MAX,
+        LATITUDE_MAX,
+    )
+
+    boundaries = []
+    for shp in sf.shapes():
+        coords = [transformer.transform(x, y) for x, y in shp.points]
+        poly = Polygon([(lon, lat) for lon, lat in coords])
+        boundary = poly.boundary
+        clipped = boundary.intersection(bbox)
+        if clipped.is_empty:
+            continue
+
+        if clipped.geom_type == "LineString":
+            geoms = [clipped]
+        elif clipped.geom_type in ("MultiLineString", "GeometryCollection"):
+            geoms = [g for g in clipped.geoms if g.geom_type == "LineString"]
+        else:
+            continue
+
+        for seg in geoms:
+            lons, lats = seg.xy
+            zs = []
+            for lat_pt, lon_pt in zip(lats, lons):
+                i = int(np.abs(lat_grid - lat_pt).argmin())
+                j = int(np.abs(lon_grid - lon_pt).argmin())
+                zs.append(elev_grid[i, j])
+            boundaries.append((np.array(lats), np.array(lons), np.array(zs)))
+
+    logger.info("Loaded %d mine boundary segment(s)", len(boundaries))
+    return boundaries
+
+
 def plot_elevation(
     lat,
     lon,
@@ -210,6 +257,8 @@ def plot_elevation(
     callouts=None,
     rivers=None,
     cut_rivers=None,
+    mine_boundary=None,
+    cut_mine_boundary=None,
     apply_cutout: bool = True,
 ):
     """Plot the elevation grid as a 3D surface with optional callout points.
@@ -337,6 +386,54 @@ def plot_elevation(
                     )
                 )
 
+    mine_boundary = mine_boundary or []
+    n_mine = len(mine_boundary)
+    if n_mine:
+        logger.info("Adding %d mine boundary trace(s)", n_mine)
+    for level_idx, level in enumerate(exag_levels):
+        xs, ys, zs = [], [], []
+        for r_lat, r_lon, r_z in mine_boundary:
+            xs.extend(r_lon)
+            xs.append(None)
+            ys.extend(r_lat)
+            ys.append(None)
+            zs.extend(r_z * level)
+            zs.append(None)
+        if xs:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=xs,
+                    y=ys,
+                    z=zs,
+                    mode="lines",
+                    line=dict(color="orange", width=3),
+                    name="HVC Mine", 
+                    visible=False,
+                )
+            )
+    if cut_mine_boundary is not None:
+        for level_idx, level in enumerate(exag_levels):
+            xs, ys, zs = [], [], []
+            for r_lat, r_lon, r_z in cut_mine_boundary:
+                xs.extend(r_lon)
+                xs.append(None)
+                ys.extend(r_lat)
+                ys.append(None)
+                zs.extend(r_z * level)
+                zs.append(None)
+            if xs:
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=xs,
+                        y=ys,
+                        z=zs,
+                        mode="lines",
+                        line=dict(color="orange", width=3),
+                        name="HVC Mine", 
+                        visible=False,
+                    )
+                )
+
     start_index = exag_levels.index(exaggeration)
     total_levels = len(exag_levels)
 
@@ -360,6 +457,14 @@ def plot_elevation(
         cut_rivers_offset = offset
         if n_rivers:
             offset += total_levels
+    mine_offset = offset if n_mine else None
+    if n_mine:
+        offset += total_levels
+    cut_mine_offset = None
+    if cut_elevation is not None and cut_mine_boundary is not None:
+        cut_mine_offset = offset
+        if n_mine:
+            offset += total_levels
 
     # Hide everything by default
     for trace in fig.data:
@@ -371,12 +476,16 @@ def plot_elevation(
             fig.data[cut_callout_offset + start_index * n_points + idx].visible = True
         if n_rivers and cut_rivers_offset is not None:
             fig.data[cut_rivers_offset + start_index].visible = True
+        if n_mine and cut_mine_offset is not None:
+            fig.data[cut_mine_offset + start_index].visible = True
     else:
         fig.data[start_index].visible = True
         for idx in range(n_points):
             fig.data[callout_offset + start_index * n_points + idx].visible = True
         if n_rivers:
             fig.data[rivers_offset + start_index].visible = True
+        if n_mine:
+            fig.data[mine_offset + start_index].visible = True
 
     steps = []
     for i, level in enumerate(exag_levels):
@@ -403,6 +512,14 @@ def plot_elevation(
                 visible.append(j == i)
         # Rivers cut
         if cut_elevation is not None and cut_rivers is not None and n_rivers:
+            for j in range(total_levels):
+                visible.append(j == i)
+        # Mine boundary full
+        if n_mine:
+            for j in range(total_levels):
+                visible.append(j == i)
+        # Mine boundary cut
+        if cut_elevation is not None and cut_mine_boundary is not None and n_mine:
             for j in range(total_levels):
                 visible.append(j == i)
         step = dict(method="update", args=[{"visible": visible}], label=str(level))
@@ -444,6 +561,14 @@ def plot_elevation(
             cut_indices += list(range(cut_rivers_offset, cut_rivers_offset + total_levels))
         else:
             full_indices += list(range(rivers_offset, rivers_offset + total_levels))
+    mine_indices = []
+    if n_mine:
+        mine_indices += list(range(mine_offset, mine_offset + total_levels))
+        if cut_mine_offset is not None:
+            mine_indices += list(range(cut_mine_offset, cut_mine_offset + total_levels))
+            cut_indices += list(range(cut_mine_offset, cut_mine_offset + total_levels))
+        else:
+            full_indices += list(range(mine_offset, mine_offset + total_levels))
     plot_html = fig.to_html(full_html=False, include_plotlyjs="cdn")
 
     # checkbox_html = f"""
@@ -521,6 +646,8 @@ if __name__ == '__main__':
 
     rivers_full = load_rivers(lat, lon, elev_full)
     rivers_cut = load_rivers(lat, lon, elev_cut)
+    mine_full = load_mine_boundary(lat, lon, elev_full)
+    mine_cut = load_mine_boundary(lat, lon, elev_cut)
 
     elev_downsampled = elev_full[::5, ::5]
     elev_cut_downsampled = elev_cut[::5, ::5]
@@ -537,6 +664,8 @@ if __name__ == '__main__':
         callouts=callouts,
         rivers=rivers_full,
         cut_rivers=rivers_cut,
+        mine_boundary=mine_full,
+        cut_mine_boundary=mine_cut,
         apply_cutout=not args.no_cutout,
     )
 
