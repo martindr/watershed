@@ -111,20 +111,46 @@ def crop_extent(lat, lon, elevation, lat_min, lat_max, lon_min, lon_max):
 def plot_elevation(lat, lon, elevation, exaggeration: float = DEFAULT_EXAGGERATION):
     """Plot the elevation grid as a 3D surface."""
     logger.info("Generating elevation plot")
-    scaled_elev = elevation * exaggeration
-    fig = go.Figure(data=[go.Surface(z=scaled_elev, x=lon, y=lat)])
+
+    exag_levels = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
+    if exaggeration not in exag_levels:
+        exag_levels.insert(0, exaggeration)
+
+    fig = go.Figure()
+    for level in exag_levels:
+        fig.add_surface(z=elevation * level, x=lon, y=lat, visible=False)
+
+    start_index = exag_levels.index(exaggeration)
+    fig.data[start_index].visible = True
+
+    steps = []
+    for i, level in enumerate(exag_levels):
+        step = dict(
+            method="update",
+            args=[{"visible": [j == i for j in range(len(exag_levels))]}],
+            label=str(level),
+        )
+        steps.append(step)
+
     fig.update_layout(
-        title='Terrain Elevation',
+        title="Terrain Elevation",
         scene=dict(
-            xaxis_title='Longitude',
-            yaxis_title='Latitude',
-            zaxis_title='Elevation (m)',
-            aspectmode='data',
+            xaxis_title="Longitude",
+            yaxis_title="Latitude",
+            zaxis_title="Elevation (m)",
+            aspectmode="data",
         ),
+        sliders=[dict(
+            active=start_index,
+            currentvalue={"prefix": "Exaggeration: "},
+            pad={"t": 50},
+            steps=steps,
+        )],
     )
-    output_html = os.path.join(os.path.dirname(__file__), 'elevation_plot.html')
+
+    output_html = os.path.join(os.path.dirname(__file__), "elevation_plot.html")
     fig.write_html(output_html, auto_open=True)
-    logger.info(f'Saved plot to {output_html}')
+    logger.info(f"Saved plot to {output_html}")
 
 
 if __name__ == '__main__':

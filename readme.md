@@ -39,7 +39,6 @@ python visualize_hgt.py
 
 The script loads all `.hgt` tiles from the `data` folder and opens an interactive 3D surface plot using Plotly. Use the mouse to rotate along the x, y, and z axes.
 
-Pass `--exaggeration` to control vertical exaggeration of the terrain. Values
-less than `1.0` flatten the plot (default is `0.02`).
+Pass `--exaggeration` to control vertical exaggeration of the terrain when launching the script. Values less than `1.0` flatten the plot (default is `0.02`). The generated HTML now includes a slider so you can tweak the exaggeration interactively after the plot opens.
 
 Files compressed with `gzip` (`.hgt.gz`) are supported and will be decompressed automatically.
