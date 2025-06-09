@@ -1,13 +1,19 @@
 import os
 import gzip
+import logging
 import numpy as np
 import plotly.graph_objects as go
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
+# Configure basic logging so we can trace the data loaded and processed
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
+
 
 def read_hgt(file_path):
     """Read an .hgt or .hgt.gz file into a 2D numpy array."""
+    logger.info(f"Reading elevation file: {file_path}")
     open_func = gzip.open if file_path.lower().endswith('.gz') else open
     with open_func(file_path, 'rb') as f:
         raw = f.read()
@@ -15,6 +21,10 @@ def read_hgt(file_path):
     size = int(np.sqrt(data.size))
     elev = data.reshape((size, size)).astype(float)
     elev[elev == -32768] = np.nan
+    logger.info(
+        f"Loaded {file_path} with shape {elev.shape}, "
+        f"min {np.nanmin(elev):.2f}, max {np.nanmax(elev):.2f}"
+    )
     return elev
 
 
@@ -25,10 +35,13 @@ def lat_lon_from_filename(filename):
     lat = int(name[1:3]) * lat_sign
     lon_sign = 1 if name[3] in ('E', 'e') else -1
     lon = int(name[4:7]) * lon_sign
-    return lat, lon
+    coords = (lat, lon)
+    logger.debug(f"Extracted coordinates {coords} from {filename}")
+    return coords
 
 
 def load_tiles():
+    logger.info(f"Loading tiles from {DATA_DIR}")
     tiles = []
     for fname in os.listdir(DATA_DIR):
         if fname.lower().endswith(('.hgt', '.hgt.gz')):
@@ -36,7 +49,9 @@ def load_tiles():
             elev = read_hgt(path)
             base = fname[:-3] if fname.lower().endswith('.gz') else fname
             lat, lon = lat_lon_from_filename(base)
+            logger.info(f"Loaded tile {fname} at lat={lat}, lon={lon}")
             tiles.append((lat, lon, elev))
+    logger.info(f"Total tiles loaded: {len(tiles)}")
     return tiles
 
 
@@ -44,6 +59,7 @@ def merge_tiles(tiles):
     """Merge adjacent tiles into a single elevation array."""
     if not tiles:
         raise ValueError('No .hgt files found in data directory')
+    logger.info("Merging tiles into a single grid")
     lats = sorted(set(lat for lat, _, _ in tiles))
     lons = sorted(set(lon for _, lon, _ in tiles))
     tile_size = tiles[0][2].shape[0]
@@ -58,10 +74,15 @@ def merge_tiles(tiles):
     lon0 = lons[0]
     lat_coords = np.linspace(lat0, lat0 + len(lats), grid.shape[0])
     lon_coords = np.linspace(lon0, lon0 + len(lons), grid.shape[1])
+    logger.info(
+        f"Merged grid shape {grid.shape}, lat range {lat_coords[0]}-{lat_coords[-1]}, "
+        f"lon range {lon_coords[0]}-{lon_coords[-1]}"
+    )
     return lat_coords, lon_coords, grid
 
 
 def plot_elevation(lat, lon, elevation):
+    logger.info("Generating elevation plot")
     fig = go.Figure(data=[go.Surface(z=elevation, x=lon, y=lat)])
     fig.update_layout(
         title='Terrain Elevation',
@@ -73,10 +94,12 @@ def plot_elevation(lat, lon, elevation):
     )
     output_html = os.path.join(os.path.dirname(__file__), 'elevation_plot.html')
     fig.write_html(output_html, auto_open=True)
-    print(f'Saved plot to {output_html}')
+    logger.info(f'Saved plot to {output_html}')
 
 
 if __name__ == '__main__':
+    logger.info("Starting elevation visualization workflow")
     tiles = load_tiles()
     lat, lon, elev = merge_tiles(tiles)
     plot_elevation(lat, lon, elev)
+    logger.info("Visualization complete")
