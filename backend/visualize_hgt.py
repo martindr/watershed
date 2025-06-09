@@ -6,6 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 import shapefile
 from pyproj import Transformer
+from shapely.geometry import LineString, box
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 RIVERS_SHP = os.path.join(DATA_DIR, 'HVC_NamedStreams', 'HVC_NamedStreams.shp')
@@ -155,7 +156,7 @@ def cut_north_of_line(lat, lon, elevation, pt1, pt2):
 
 
 def load_rivers(lat_grid, lon_grid, elev_grid, shp_path=RIVERS_SHP):
-    """Load river polylines and sample elevation along them."""
+    """Load river polylines clipped to the area of interest."""
     if not os.path.exists(shp_path):
         logger.warning("River shapefile not found: %s", shp_path)
         return []
@@ -163,16 +164,38 @@ def load_rivers(lat_grid, lon_grid, elev_grid, shp_path=RIVERS_SHP):
     logger.info("Loading rivers from %s", shp_path)
     sf = shapefile.Reader(shp_path)
     transformer = Transformer.from_crs("epsg:26910", "epsg:4326", always_xy=True)
+
+    bbox = box(
+        LONGITUDE_MIN,
+        LATITUDE_MIN,
+        LONGITUDE_MAX,
+        LATITUDE_MAX,
+    )
+
     rivers = []
     for shp in sf.shapes():
         coords = [transformer.transform(x, y) for x, y in shp.points]
-        lons, lats = zip(*coords)
-        zs = []
-        for lat_pt, lon_pt in zip(lats, lons):
-            i = int(np.abs(lat_grid - lat_pt).argmin())
-            j = int(np.abs(lon_grid - lon_pt).argmin())
-            zs.append(elev_grid[i, j])
-        rivers.append((np.array(lats), np.array(lons), np.array(zs)))
+        line = LineString([(lon, lat) for lon, lat in coords])
+        clipped = line.intersection(bbox)
+        if clipped.is_empty:
+            continue
+
+        if clipped.geom_type == "LineString":
+            segments = [clipped]
+        elif clipped.geom_type == "MultiLineString":
+            segments = list(clipped.geoms)
+        else:
+            continue
+
+        for seg in segments:
+            lons, lats = seg.xy
+            zs = []
+            for lat_pt, lon_pt in zip(lats, lons):
+                i = int(np.abs(lat_grid - lat_pt).argmin())
+                j = int(np.abs(lon_grid - lon_pt).argmin())
+                zs.append(elev_grid[i, j])
+            rivers.append((np.array(lats), np.array(lons), np.array(zs)))
+
     logger.info("Loaded %d river polylines", len(rivers))
     return rivers
 
