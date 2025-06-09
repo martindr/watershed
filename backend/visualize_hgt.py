@@ -9,7 +9,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 # Default vertical exaggeration applied to the elevation data when plotting.
 # Values < 1.0 will make the landscape appear flatter.
-DEFAULT_EXAGGERATION = 0.00002
+DEFAULT_EXAGGERATION = 0.00003
 
 # Area of interest bounding box
 LONGITUDE_MIN, LONGITUDE_MAX = -121.363525, -120.7
