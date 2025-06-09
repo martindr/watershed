@@ -9,3 +9,6 @@ frontend/node_modules/
 # Logs
 npm-debug.log*
 
+# Large GIS files
+*.hgt
+*.hgt.gz
