@@ -71,7 +71,9 @@ def plot_elevation(lat, lon, elevation):
             zaxis_title='Elevation (m)'
         ),
     )
-    fig.show()
+    output_html = os.path.join(os.path.dirname(__file__), 'elevation_plot.html')
+    fig.write_html(output_html, auto_open=True)
+    print(f'Saved plot to {output_html}')
 
 
 if __name__ == '__main__':
