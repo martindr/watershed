@@ -42,3 +42,14 @@ The script loads all `.hgt` tiles from the `data` folder and opens an interactiv
 Pass `--exaggeration` to control vertical exaggeration of the terrain when launching the script. Values less than `1.0` flatten the plot (default is `0.02`). The generated HTML now includes a slider so you can tweak the exaggeration interactively after the plot opens.
 
 Files compressed with `gzip` (`.hgt.gz`) are supported and will be decompressed automatically.
+
+## Infographic Generation
+
+To create a simple infographic of the HVC area with illustrative trees, run:
+
+```bash
+cd backend
+python create_infographic.py
+```
+
+The output image `hvc.jpg` will be written to `backend/results`.
