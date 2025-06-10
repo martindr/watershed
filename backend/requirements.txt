@@ -1,7 +1,6 @@
 fastapi
 uvicorn[standard]
-
-
+pillow
 numpy
 plotly
 pyshp
