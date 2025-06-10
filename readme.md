@@ -41,4 +41,6 @@ The script loads all `.hgt` tiles from the `data` folder and opens an interactiv
 
 Pass `--exaggeration` to control vertical exaggeration of the terrain when launching the script. Values less than `1.0` flatten the plot (default is `0.02`). The generated HTML now includes a slider so you can tweak the exaggeration interactively after the plot opens.
 
+Use `--trees N` to overlay `N` exaggerated tree markers on the interactive plot. The trees are randomly distributed within the displayed area and scale with the vertical exaggeration level.
+
 Files compressed with `gzip` (`.hgt.gz`) are supported and will be decompressed automatically.

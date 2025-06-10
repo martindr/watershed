@@ -19,6 +19,10 @@ DEFAULT_EXAGGERATION = 0.00003
 # Distance (in meters) to extend callout lines above the terrain
 CALLOUT_LINE_HEIGHT_M = 500
 
+# Parameters controlling the appearance of generated trees
+TREE_TRUNK_HEIGHT_M = 15
+TREE_CANOPY_HEIGHT_M = 25
+
 # Area of interest bounding box
 LONGITUDE_MIN, LONGITUDE_MAX = -121.363525, -120.7
 LATITUDE_MIN, LATITUDE_MAX = 50.2, 50.7
@@ -250,6 +254,18 @@ def load_mine_boundary(lat_grid, lon_grid, elev_grid, shp_path=MINE_SHP):
     return boundaries
 
 
+def generate_tree_points(lat_grid, lon_grid, elev_grid, count=20, seed=42):
+    """Randomly sample points on the grid to place hypothetical trees."""
+    rng = np.random.default_rng(seed)
+    lat_indices = rng.integers(0, len(lat_grid), size=count)
+    lon_indices = rng.integers(0, len(lon_grid), size=count)
+    trees = []
+    for i, j in zip(lat_indices, lon_indices):
+        trees.append((lat_grid[i], lon_grid[j], float(elev_grid[i, j])))
+    logger.info("Generated %d tree location(s)", len(trees))
+    return trees
+
+
 def plot_elevation(
     lat,
     lon,
@@ -262,6 +278,8 @@ def plot_elevation(
     cut_rivers=None,
     mine_boundary=None,
     cut_mine_boundary=None,
+    trees=None,
+    cut_trees=None,
     apply_cutout: bool = True,
 ):
     """Plot the elevation grid as a 3D surface with optional callout points.
@@ -341,6 +359,69 @@ def plot_elevation(
                         text=["", name],
                         textposition="top center",
                         line=dict(color="red", width=2),
+                        visible=False,
+                    )
+                )
+
+    # Trees
+    trees = trees or []
+    n_trees = len(trees)
+    if n_trees:
+        logger.info("Adding %d tree(s)", n_trees)
+    for level_idx, level in enumerate(exag_levels):
+        for lat_pt, lon_pt, elev_pt in trees:
+            base = elev_pt * level
+            trunk_top = base + TREE_TRUNK_HEIGHT_M * level
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[lon_pt, lon_pt],
+                    y=[lat_pt, lat_pt],
+                    z=[base, trunk_top],
+                    mode="lines",
+                    line=dict(color="sienna", width=3),
+                    visible=False,
+                )
+            )
+            fig.add_trace(
+                go.Cone(
+                    x=[lon_pt],
+                    y=[lat_pt],
+                    z=[trunk_top],
+                    u=[0],
+                    v=[0],
+                    w=[TREE_CANOPY_HEIGHT_M * level],
+                    anchor="tail",
+                    colorscale="Greens",
+                    showscale=False,
+                    visible=False,
+                )
+            )
+    if cut_elevation is not None and cut_trees is not None:
+        for level_idx, level in enumerate(exag_levels):
+            for lat_pt, lon_pt, elev_pt in cut_trees:
+                base = elev_pt * level
+                trunk_top = base + TREE_TRUNK_HEIGHT_M * level
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[lon_pt, lon_pt],
+                        y=[lat_pt, lat_pt],
+                        z=[base, trunk_top],
+                        mode="lines",
+                        line=dict(color="sienna", width=3),
+                        visible=False,
+                    )
+                )
+                fig.add_trace(
+                    go.Cone(
+                        x=[lon_pt],
+                        y=[lat_pt],
+                        z=[trunk_top],
+                        u=[0],
+                        v=[0],
+                        w=[TREE_CANOPY_HEIGHT_M * level],
+                        anchor="tail",
+                        colorscale="Greens",
+                        showscale=False,
                         visible=False,
                     )
                 )
@@ -472,6 +553,13 @@ def plot_elevation(
         cut_mine_offset = offset
         if n_mine:
             offset += total_levels
+    trees_offset = offset if n_trees else None
+    if n_trees:
+        offset += total_levels * 2 * n_trees
+    cut_trees_offset = None
+    if cut_elevation is not None and cut_trees is not None and n_trees:
+        cut_trees_offset = offset
+        offset += total_levels * 2 * n_trees
 
     # Hide everything by default
     for trace in fig.data:
@@ -485,6 +573,9 @@ def plot_elevation(
             fig.data[cut_rivers_offset + start_index].visible = True
         if n_mine and cut_mine_offset is not None:
             fig.data[cut_mine_offset + start_index].visible = True
+        if n_trees and cut_trees_offset is not None:
+            for idx in range(2 * n_trees):
+                fig.data[cut_trees_offset + start_index * 2 * n_trees + idx].visible = True
     else:
         fig.data[start_index].visible = True
         for idx in range(n_points):
@@ -493,6 +584,9 @@ def plot_elevation(
             fig.data[rivers_offset + start_index].visible = True
         if n_mine:
             fig.data[mine_offset + start_index].visible = True
+        if n_trees:
+            for idx in range(2 * n_trees):
+                fig.data[trees_offset + start_index * 2 * n_trees + idx].visible = True
 
     steps = []
     for i, level in enumerate(exag_levels):
@@ -529,6 +623,16 @@ def plot_elevation(
         if cut_elevation is not None and cut_mine_boundary is not None and n_mine:
             for j in range(total_levels):
                 visible.append(j == i)
+        # Trees full
+        if n_trees:
+            for j in range(total_levels):
+                for _ in range(2 * n_trees):
+                    visible.append(j == i)
+        # Trees cut
+        if cut_elevation is not None and cut_trees is not None and n_trees:
+            for j in range(total_levels):
+                for _ in range(2 * n_trees):
+                    visible.append(j == i)
         step = dict(method="update", args=[{"visible": visible}], label=str(level))
         steps.append(step)
 
@@ -576,6 +680,14 @@ def plot_elevation(
             cut_indices += list(range(cut_mine_offset, cut_mine_offset + total_levels))
         else:
             full_indices += list(range(mine_offset, mine_offset + total_levels))
+    tree_indices = []
+    if n_trees:
+        tree_indices += list(range(trees_offset, trees_offset + total_levels * 2 * n_trees))
+        if cut_trees_offset is not None:
+            tree_indices += list(range(cut_trees_offset, cut_trees_offset + total_levels * 2 * n_trees))
+            cut_indices += list(range(cut_trees_offset, cut_trees_offset + total_levels * 2 * n_trees))
+        else:
+            full_indices += list(range(trees_offset, trees_offset + total_levels * 2 * n_trees))
     plot_html = fig.to_html(full_html=False, include_plotlyjs="cdn")
 
     # checkbox_html = f"""
@@ -626,6 +738,12 @@ if __name__ == '__main__':
         action="store_true",
         help="Start with the cutout disabled",
     )
+    parser.add_argument(
+        "--trees",
+        type=int,
+        default=0,
+        help="Number of hypothetical trees to generate",
+    )
 
     args = parser.parse_args()
 
@@ -662,6 +780,15 @@ if __name__ == '__main__':
         ("Pukaist Creek", 50.592647, -121.324994),
         ("Witches Brook", 50.426341, -120.947810),
     ]
+
+    trees_full = []
+    trees_cut = []
+    if args.trees > 0:
+        trees_full = generate_tree_points(lat[::5], lon[::5], elev_downsampled, count=args.trees)
+        for lat_pt, lon_pt, _ in trees_full:
+            i = int(np.abs(lat[::5] - lat_pt).argmin())
+            j = int(np.abs(lon[::5] - lon_pt).argmin())
+            trees_cut.append((lat_pt, lon_pt, float(elev_cut_downsampled[i, j])))
     plot_elevation(
         lat[::5],
         lon[::5],
@@ -673,6 +800,8 @@ if __name__ == '__main__':
         cut_rivers=rivers_cut,
         mine_boundary=mine_full,
         cut_mine_boundary=mine_cut,
+        trees=trees_full,
+        cut_trees=trees_cut,
         apply_cutout=not args.no_cutout,
     )
 
